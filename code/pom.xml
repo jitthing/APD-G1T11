@@ -29,7 +29,7 @@
                     <archive>
                         <manifest>
                             <!-- This specifies the main class that will be executed when the JAR is run -->
-                            <mainClass>org.example.DictionaryAttack</mainClass>
+                            <mainClass>org.example.PasswordCracker</mainClass>
                         </manifest>
                     </archive>
                 </configuration>
