@@ -2,7 +2,7 @@
 echo ========================================
 echo Testing on Large Dataset (Optimized)
 echo ========================================
-java -Xms512m -Xmx1g -XX:+UseParallelGC -jar run.jar datasets/large/in.txt datasets/large/dictionary.txt datasets/large/test_out.txt
+java -Xms256m -Xmx512m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -jar run.jar datasets/large/in.txt datasets/large/dictionary.txt datasets/large/test_out.txt
 echo.
 echo Verifying correctness (sorting before comparison)...
 powershell -Command "Get-Content datasets\large\out.txt | Sort-Object | Out-File datasets\large\out_sorted.txt"

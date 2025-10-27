@@ -2,7 +2,7 @@
 echo ========================================
 echo Testing on Small Dataset
 echo ========================================
-java -jar run.jar datasets/small/in.txt datasets/small/dictionary.txt datasets/small/test_out.txt
+java -Xms256m -Xmx512m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -jar run.jar datasets/small/in.txt datasets/small/dictionary.txt datasets/small/test_out.txt
 echo.
 echo Verifying correctness...
 powershell -Command "Get-Content datasets\small\out.txt | Sort-Object | Out-File datasets\small\out_sorted.txt"
