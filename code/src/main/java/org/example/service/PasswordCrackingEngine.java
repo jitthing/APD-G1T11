@@ -60,12 +60,14 @@ public class PasswordCrackingEngine {
             hashToUsers.computeIfAbsent(user.hashedPassword(), k -> new ArrayList<>()).add(user)
         );
 
-        // Create fixed thread pool for CPU-bound tasks
-        ExecutorService executor = Executors.newFixedThreadPool(numThreads);
+        // Use work-stealing pool for better load balancing with CPU-bound tasks
+        // This automatically balances work across threads more efficiently
+        ExecutorService executor = Executors.newWorkStealingPool(numThreads);
 
-        // Calculate chunk size for work distribution
-        int chunkSize = Math.max(1, dictionary.size() / (numThreads * 4)); // 4x threads for better load balancing
-        List<Future<?>> futures = new CopyOnWriteArrayList<>();
+        // Optimal chunk size: exactly numThreads chunks for less overhead
+        // This reduces context switching and synchronization costs
+        int chunkSize = (dictionary.size() + numThreads - 1) / numThreads;
+        List<Future<?>> futures = new ArrayList<>(numThreads);
 
         // Partition dictionary and submit tasks
         for (int i = 0; i < dictionary.size(); i += chunkSize) {

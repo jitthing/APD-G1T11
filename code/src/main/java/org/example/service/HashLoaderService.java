@@ -2,9 +2,11 @@ package org.example.service;
 
 import org.example.model.User;
 
+import java.io.BufferedReader;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -17,18 +19,33 @@ public class HashLoaderService {
 
     /**
      * Loads users from the specified file.
-     * Expected format: username,hashedPassword (CSV format)
+     * Optimized with BufferedReader and pre-sized HashMap.
      *
      * @param filePath path to the input file
      * @return Map of username to User object
      * @throws IOException if file cannot be read
      */
     public Map<String, User> loadUsers(String filePath) throws IOException {
-        return Files.lines(Path.of(filePath))
-                .map(String::trim)
-                .filter(line -> !line.isEmpty())
-                .map(this::parseUserLine)
-                .collect(Collectors.toMap(User::username, user -> user));
+        Path path = Path.of(filePath);
+
+        // Pre-size HashMap based on file line count estimate
+        long fileSize = Files.size(path);
+        int estimatedUsers = (int)(fileSize / 70); // Avg ~70 chars per line
+        Map<String, User> users = new HashMap<>((int)(estimatedUsers * 1.25)); // Size with 0.8 load factor
+
+        // Use BufferedReader for optimal I/O
+        try (BufferedReader reader = Files.newBufferedReader(path)) {
+            String line;
+            while ((line = reader.readLine()) != null) {
+                line = line.trim();
+                if (!line.isEmpty()) {
+                    User user = parseUserLine(line);
+                    users.put(user.username(), user);
+                }
+            }
+        }
+
+        return users;
     }
 
     /**

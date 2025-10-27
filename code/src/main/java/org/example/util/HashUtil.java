@@ -22,6 +22,18 @@ public final class HashUtil {
         }
     });
 
+    /**
+     * ThreadLocal char array for hex conversion - reused to reduce allocations.
+     * SHA-256 produces 32 bytes = 64 hex chars.
+     */
+    private static final ThreadLocal<char[]> HEX_CHARS_BUFFER = ThreadLocal.withInitial(() -> new char[64]);
+
+    /**
+     * Lookup table for fast byte to hex conversion.
+     * Pre-computed to avoid runtime calculations.
+     */
+    private static final char[] HEX_ARRAY = "0123456789abcdef".toCharArray();
+
     // Private constructor to prevent instantiation
     private HashUtil() {
         throw new UnsupportedOperationException("Utility class cannot be instantiated");
@@ -46,18 +58,23 @@ public final class HashUtil {
 
     /**
      * Converts byte array to hexadecimal string.
-     * Optimized implementation for performance.
+     * Highly optimized using lookup table and ThreadLocal buffer for maximum performance.
      *
      * @param bytes the byte array
      * @return hexadecimal string representation
      */
     private static String bytesToHex(byte[] bytes) {
-        char[] hexChars = new char[bytes.length * 2];
-        for (int i = 0; i < bytes.length; i++) {
-            int v = bytes[i] & 0xFF;
-            hexChars[i * 2] = HEX_ARRAY[v >>> 4];
-            hexChars[i * 2 + 1] = HEX_ARRAY[v & 0x0F];
+        // Reuse ThreadLocal buffer for SHA-256 (32 bytes = 64 chars)
+        char[] hexChars = HEX_CHARS_BUFFER.get();
+
+        // Use lookup table for faster conversion - no conditionals
+        for (int j = 0; j < bytes.length; j++) {
+            int v = bytes[j] & 0xFF;
+            hexChars[j * 2] = HEX_ARRAY[v >>> 4];  // High nibble
+            hexChars[j * 2 + 1] = HEX_ARRAY[v & 0x0F];  // Low nibble
         }
-        return new String(hexChars);
+
+        // Create string from exact length needed
+        return new String(hexChars, 0, bytes.length * 2);
     }
 }
