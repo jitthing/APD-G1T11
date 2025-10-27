@@ -41,6 +41,9 @@ public final class HashUtil {
         return bytesToHex(hash);
     }
 
+
+    private static final char[] HEX_ARRAY = "0123456789abcdef".toCharArray();
+
     /**
      * Converts byte array to hexadecimal string.
      * Optimized implementation for performance.
@@ -49,14 +52,12 @@ public final class HashUtil {
      * @return hexadecimal string representation
      */
     private static String bytesToHex(byte[] bytes) {
-        var hexString = new StringBuilder(bytes.length * 2);
-        for (byte b : bytes) {
-            String hex = Integer.toHexString(0xff & b);
-            if (hex.length() == 1) {
-                hexString.append('0');
-            }
-            hexString.append(hex);
+        char[] hexChars = new char[bytes.length * 2];
+        for (int i = 0; i < bytes.length; i++) {
+            int v = bytes[i] & 0xFF;
+            hexChars[i * 2] = HEX_ARRAY[v >>> 4];
+            hexChars[i * 2 + 1] = HEX_ARRAY[v & 0x0F];
         }
-        return hexString.toString();
+        return new String(hexChars);
     }
 }
