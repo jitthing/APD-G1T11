@@ -1,0 +1,3 @@
+# Optimal command for fastest performance (~45ms)
+
+java -Xms256m -Xmx512m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -jar run.jar datasets/large/in.txt datasets/large/dictionary.txt out.txt

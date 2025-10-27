@@ -32,7 +32,10 @@ public class PasswordCracker {
     public PasswordCracker() {
         this.hashLoader = new HashLoaderService();
         this.dictionaryLoader = new DictionaryLoaderService();
-        this.crackingEngine = new PasswordCrackingEngine();
+
+        // Allow thread count to be configured via system property
+        int numThreads = Integer.getInteger("num.threads", 4);
+        this.crackingEngine = new PasswordCrackingEngine(numThreads);
         this.outputWriter = new OutputWriterService();
     }
 
