@@ -52,10 +52,6 @@ public final class HashUtil {
         byte[] hash = digest.digest(input.getBytes(StandardCharsets.UTF_8));
         return bytesToHex(hash);
     }
-
-
-    private static final char[] HEX_ARRAY = "0123456789abcdef".toCharArray();
-
     /**
      * Converts byte array to hexadecimal string.
      * Highly optimized using lookup table and ThreadLocal buffer for maximum performance.
