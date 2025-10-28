@@ -226,11 +226,11 @@ Added **batched atomic updates** using local counters:
 ```java
 for (String password : passwordChunk) {
     String hash = HashUtil.sha256(password);
-    statistics.incrementHashesComputed();      // ⚠️ Atomic operation
-    statistics.incrementTasksProcessed();      // ⚠️ Atomic operation
+    statistics.incrementHashesComputed();      // Atomic operation
+    statistics.incrementTasksProcessed();      // Atomic operation
     
     if (matchedUsers != null) {
-        statistics.incrementPasswordsFound();  // ⚠️ Atomic operation
+        statistics.incrementPasswordsFound();  // Atomic operation
     }
 }
 ```
@@ -244,11 +244,11 @@ long localPasswordsFound = 0;
 
 for (String password : passwordChunk) {
     String hash = HashUtil.sha256(password);
-    localHashesComputed++;    // ✓ Simple increment (register/L1 cache)
-    localTasksProcessed++;    // ✓ Simple increment
+    localHashesComputed++;    // Simple increment (register/L1 cache)
+    localTasksProcessed++;    // Simple increment
     
     if (matchedUsers != null) {
-        localPasswordsFound++;  // ✓ Simple increment
+        localPasswordsFound++;  // Simple increment
     }
 }
 
@@ -285,17 +285,6 @@ statistics.addPasswordsFound(localPasswordsFound);
 - Eliminates constant cache line invalidation during processing
 - CPUs spend more time computing, less time synchronizing
 - Better CPU instruction pipelining and branch prediction
-
-**Expected Speedup**:
-- **Single-threaded**: Minimal impact (~1-2%) - no contention anyway
-- **Multi-threaded (4 cores)**: **5-15% faster** - significant contention reduction
-- **High core count (16+ cores)**: **15-25% faster** - contention was severe
-
-**Real-World Measurements** (Large Dataset):
-```
-Before batching: ~51ms
-After batching:  ~43-46ms (estimated 10-15% improvement)
-```
 
 ### Technical Deep Dive: Why This Works
 
