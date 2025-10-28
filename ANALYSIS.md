@@ -204,6 +204,61 @@ sort datasets/large/output.txt > actual.txt
 diff expected.txt actual.txt
 ```
 
+## Additional Optimization: High-Performance Output Writing
+
+### Problem Identified
+Detailed profiling revealed that **output writing was taking 34ms (22.7% of total time)**:
+- Writing 10,877 results was surprisingly slow
+- Sequential stream operations with exception handling overhead
+- Many small I/O operations (one write per line)
+- Sorting in stream pipeline adds overhead
+
+### Solution Implemented
+Optimized the `OutputWriterService` for batch writing:
+
+**Before (Slow - 34ms)**:
+```java
+crackedPasswords.values().stream()
+    .sorted((a, b) -> a.username().compareTo(b.username()))
+    .forEach(result -> {
+        try {
+            writer.write(result.toCsvLine());
+            writer.newLine();
+        } catch (IOException e) {
+            throw new RuntimeException(...);
+        }
+    });
+```
+
+**After (Fast - Expected ~5-10ms)**:
+```java
+// 1. Convert to list and sort in-place
+List<CrackResult> sortedResults = new ArrayList<>(crackedPasswords.values());
+sortedResults.sort(Comparator.comparing(CrackResult::username));
+
+// 2. Build entire output in memory (single StringBuilder)
+StringBuilder output = new StringBuilder((crackedPasswords.size() + 1) * 100);
+output.append(CSV_HEADER).append('\n');
+for (CrackResult result : sortedResults) {
+    output.append(result.toCsvLine()).append('\n');
+}
+
+// 3. Single large write operation
+writer.write(output.toString());
+```
+
+**Key Improvements**:
+1. **Batch Memory Building**: Pre-allocate StringBuilder and build entire output in memory
+2. **Single Write Operation**: One large write instead of 10,877+ small writes
+3. **No Exception Handling in Loop**: Cleaner, faster code
+4. **Efficient Sorting**: In-place sort with TimSort algorithm
+
+**Expected Performance Gain**:
+- **Before**: 34ms (22.7% of total time)
+- **After**: ~5-10ms estimated (3-5% of total time)
+- **Speedup**: 3-7x faster output writing
+- **Total Impact**: Could reduce overall time from 150ms to ~120-130ms
+
 ## Conclusion
 
 The refactored solution successfully addresses all identified flaws:
@@ -213,3 +268,4 @@ The refactored solution successfully addresses all identified flaws:
 - ✅ Modern Java 21 features
 - ✅ ~392,000x performance improvement
 - ✅ 100% correctness verified
+- ✅ Optimized output writing with batch operations

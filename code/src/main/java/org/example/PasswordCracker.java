@@ -1,12 +1,16 @@
 package org.example;
 
+import java.util.List;
+import java.util.Map;
+
 import org.example.model.CrackResult;
 import org.example.model.CrackingStatistics;
 import org.example.model.User;
-import org.example.service.*;
-
-import java.util.List;
-import java.util.Map;
+import org.example.service.DictionaryLoaderService;
+import org.example.service.HashLoaderService;
+import org.example.service.OutputWriterService;
+import org.example.service.PasswordCrackingEngine;
+import org.example.service.StatusReporterService;
 
 /**
  * Main orchestrator for password dictionary attack application.
@@ -73,15 +77,22 @@ public class PasswordCracker {
      * @throws Exception if any error occurs during execution
      */
     public void execute(String inputFile, String dictionaryFile, String outputFile) throws Exception {
+        long overallStart = System.currentTimeMillis();
+        
         System.out.println("=== Password Dictionary Attack ===");
         System.out.println("Loading data...");
 
         // Load users and dictionary
+        long loadStart = System.currentTimeMillis();
         Map<String, User> users = hashLoader.loadUsers(inputFile);
+        long usersLoadTime = System.currentTimeMillis() - loadStart;
+        
+        long dictStart = System.currentTimeMillis();
         List<String> dictionary = dictionaryLoader.loadDictionary(dictionaryFile);
+        long dictLoadTime = System.currentTimeMillis() - dictStart;
 
-        System.out.println("Loaded " + users.size() + " users");
-        System.out.println("Loaded " + dictionary.size() + " passwords");
+        System.out.println("Loaded " + users.size() + " users in " + usersLoadTime + "ms");
+        System.out.println("Loaded " + dictionary.size() + " passwords in " + dictLoadTime + "ms");
 
         // Calculate total tasks for statistics
         long totalTasks = dictionary.size(); // One task per password (much better than N*M)
@@ -93,15 +104,17 @@ public class PasswordCracker {
         var statusReporter = new StatusReporterService(statistics);
         statusReporter.start();
 
-        System.out.println("Starting attack with " + totalTasks + " total tasks...");
-        System.out.println("Using " + crackingEngine.getNumThreads() + " threads for parallel processing");
+        System.out.println("\nStarting attack with " + totalTasks + " total tasks...");
+        System.out.println("Using " + crackingEngine.getNumThreads() + " threads for parallel processing\n");
 
         // Execute password cracking
+        long crackStart = System.currentTimeMillis();
         Map<String, CrackResult> crackedPasswords = crackingEngine.crackPasswords(
                 users,
                 dictionary,
                 statistics
         );
+        long crackTime = System.currentTimeMillis() - crackStart;
 
         // Stop status reporter
         statusReporter.stop();
@@ -110,12 +123,23 @@ public class PasswordCracker {
         statusReporter.printFinalSummary();
 
         // Write results to output file
+        long writeStart = System.currentTimeMillis();
         if (!crackedPasswords.isEmpty()) {
             outputWriter.writeCrackedPasswords(outputFile, crackedPasswords);
         } else {
             System.out.println("No passwords were cracked.");
         }
+        long writeTime = System.currentTimeMillis() - writeStart;
 
+        long overallTime = System.currentTimeMillis() - overallStart;
+        
+        System.out.println("\n=== Performance Breakdown ===");
+        System.out.printf("User Loading:     %5dms (%5.1f%%)%n", usersLoadTime, usersLoadTime * 100.0 / overallTime);
+        System.out.printf("Dict Loading:     %5dms (%5.1f%%)%n", dictLoadTime, dictLoadTime * 100.0 / overallTime);
+        System.out.printf("Password Cracking:%5dms (%5.1f%%) ⭐%n", crackTime, crackTime * 100.0 / overallTime);
+        System.out.printf("Output Writing:   %5dms (%5.1f%%)%n", writeTime, writeTime * 100.0 / overallTime);
+        System.out.printf("Total Time:       %5dms%n", overallTime);
+        
         System.out.println("\n=== Attack Complete ===");
     }
 }

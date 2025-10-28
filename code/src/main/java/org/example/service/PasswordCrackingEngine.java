@@ -1,12 +1,19 @@
 package org.example.service;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
 import org.example.model.CrackResult;
 import org.example.model.CrackingStatistics;
 import org.example.model.User;
 import org.example.util.HashUtil;
-
-import java.util.*;
-import java.util.concurrent.*;
 
 /**
  * High-performance concurrent password cracking engine.
@@ -114,15 +121,36 @@ public class PasswordCrackingEngine {
             Map<String, CrackResult> crackedPasswords,
             CrackingStatistics statistics
     ) {
+        // Timing measurements (in nanoseconds)
+        long totalHashTime = 0;
+        long totalLookupTime = 0;
+        long totalStoreTime = 0;
+        long totalAtomicTime = 0;
+        int matchCount = 0;
+
         for (String password : passwordChunk) {
-            // Compute hash once for this password
+            // Measure hash computation time
+            long hashStart = System.nanoTime();
             String hash = HashUtil.sha256(password);
+            totalHashTime += (System.nanoTime() - hashStart);
+            
+            // Measure atomic update time
+            long atomicStart = System.nanoTime();
             statistics.incrementHashesComputed();
             statistics.incrementTasksProcessed();
+            totalAtomicTime += (System.nanoTime() - atomicStart);
 
-            // Check if this hash matches any users (O(1) lookup)
+            // Measure lookup time
+            long lookupStart = System.nanoTime();
             List<User> matchedUsers = hashToUsers.get(hash);
+            totalLookupTime += (System.nanoTime() - lookupStart);
+
             if (matchedUsers != null) {
+                matchCount++;
+                
+                // Measure storage time
+                long storeStart = System.nanoTime();
+                
                 // Password cracked! Store result for ALL users with this hash
                 for (User user : matchedUsers) {
                     crackedPasswords.putIfAbsent(
@@ -131,8 +159,31 @@ public class PasswordCrackingEngine {
                     );
                     statistics.incrementPasswordsFound();
                 }
+                
+                totalStoreTime += (System.nanoTime() - storeStart);
             }
         }
+
+        // Log timing breakdown for this chunk
+        double hashMs = totalHashTime / 1_000_000.0;
+        double lookupMs = totalLookupTime / 1_000_000.0;
+        double storeMs = totalStoreTime / 1_000_000.0;
+        double atomicMs = totalAtomicTime / 1_000_000.0;
+        double totalMs = hashMs + lookupMs + storeMs + atomicMs;
+        
+        System.out.printf("[Thread-%s] Chunk: %d passwords, %d matches | Total: %.2fms%n" +
+                "  ├─ Hash:   %.2fms (%.1f%%) - %.1fμs/hash%n" +
+                "  ├─ Lookup: %.2fms (%.1f%%) - %.1fμs/lookup%n" +
+                "  ├─ Store:  %.2fms (%.1f%%)%n" +
+                "  └─ Atomic: %.2fms (%.1f%%)%n",
+                Thread.currentThread().getName(),
+                passwordChunk.size(),
+                matchCount,
+                totalMs,
+                hashMs, (hashMs / totalMs * 100), (totalHashTime / passwordChunk.size() / 1000.0),
+                lookupMs, (lookupMs / totalMs * 100), (totalLookupTime / passwordChunk.size() / 1000.0),
+                storeMs, (storeMs / totalMs * 100),
+                atomicMs, (atomicMs / totalMs * 100));
     }
 
     /**
