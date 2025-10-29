@@ -136,16 +136,23 @@ public class PasswordCrackingEngine {
 
             // Check if this hash matches any users (O(1) lookup)
             List<User> matchedUsers = hashToUsers.get(hash);
-            if (matchedUsers != null) {
-                // Password cracked! Store result for ALL users with this hash
-                for (User user : matchedUsers) {
-                    crackedPasswords.putIfAbsent(
-                            user.username(),
-                            new CrackResult(user.username(), user.hashedPassword(), password)
-                    );
-                    localPasswordsFound++;
+                if (matchedUsers != null) {
+                    // Password cracked! Store result for ALL users with this hash
+                    // Only count a password as "found" when we actually insert a new entry
+                    // into the crackedPasswords map. This avoids over-counting when the
+                    // dictionary contains duplicate candidate passwords (the same hash
+                    // may be matched multiple times).
+                    for (User user : matchedUsers) {
+                        CrackResult previous = crackedPasswords.putIfAbsent(
+                                user.username(),
+                                new CrackResult(user.username(), user.hashedPassword(), password)
+                        );
+                        if (previous == null) {
+                            // We successfully added a new cracked user entry
+                            localPasswordsFound++;
+                        }
+                    }
                 }
-            }
         }
 
         // Batch update: single atomic operation per counter instead of thousands
