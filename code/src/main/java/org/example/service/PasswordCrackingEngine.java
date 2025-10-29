@@ -1,12 +1,19 @@
 package org.example.service;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
+
 import org.example.model.CrackResult;
 import org.example.model.CrackingStatistics;
 import org.example.model.User;
 import org.example.util.HashUtil;
-
-import java.util.*;
-import java.util.concurrent.*;
 
 /**
  * High-performance concurrent password cracking engine.
@@ -102,6 +109,7 @@ public class PasswordCrackingEngine {
     /**
      * Processes a chunk of passwords from the dictionary.
      * Each thread processes its assigned chunk independently.
+     * Uses local counters to minimize atomic contention, then batch updates at the end.
      *
      * @param passwordChunk    chunk of passwords to process
      * @param hashToUsers      reverse lookup map from hash to list of users
@@ -114,11 +122,17 @@ public class PasswordCrackingEngine {
             Map<String, CrackResult> crackedPasswords,
             CrackingStatistics statistics
     ) {
+        // Local counters to avoid atomic contention in hot loop
+        // These will be batch-updated at the end
+        long localHashesComputed = 0;
+        long localTasksProcessed = 0;
+        long localPasswordsFound = 0;
+
         for (String password : passwordChunk) {
             // Compute hash once for this password
             String hash = HashUtil.sha256(password);
-            statistics.incrementHashesComputed();
-            statistics.incrementTasksProcessed();
+            localHashesComputed++;
+            localTasksProcessed++;
 
             // Check if this hash matches any users (O(1) lookup)
             List<User> matchedUsers = hashToUsers.get(hash);
@@ -129,10 +143,15 @@ public class PasswordCrackingEngine {
                             user.username(),
                             new CrackResult(user.username(), user.hashedPassword(), password)
                     );
-                    statistics.incrementPasswordsFound();
+                    localPasswordsFound++;
                 }
             }
         }
+
+        // Batch update: single atomic operation per counter instead of thousands
+        statistics.addHashesComputed(localHashesComputed);
+        statistics.addTasksProcessed(localTasksProcessed);
+        statistics.addPasswordsFound(localPasswordsFound);
     }
 
     /**

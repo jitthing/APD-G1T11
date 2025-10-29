@@ -45,6 +45,36 @@ public class CrackingStatistics {
     }
 
     /**
+     *
+     * @param count number of passwords found to add
+     */
+    public void addPasswordsFound(long count) {
+        if (count > 0) {
+            passwordsFound.addAndGet(count);
+        }
+    }
+
+    /**
+     *
+     * @param count number of hashes computed to add
+     */
+    public void addHashesComputed(long count) {
+        if (count > 0) {
+            hashesComputed.addAndGet(count);
+        }
+    }
+
+    /**
+     *
+     * @param count number of tasks processed to add
+     */
+    public void addTasksProcessed(long count) {
+        if (count > 0) {
+            tasksProcessed.addAndGet(count);
+        }
+    }
+
+    /**
      * Gets the current count of passwords found.
      *
      * @return number of passwords cracked

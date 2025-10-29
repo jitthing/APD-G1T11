@@ -204,6 +204,114 @@ sort datasets/large/output.txt > actual.txt
 diff expected.txt actual.txt
 ```
 
+## Additional Optimization: Batched Atomic Updates
+
+### Problem Identified
+The initial refactored solution had **atomic operation contention** in the hot loop:
+- Each thread calls `statistics.incrementHashesComputed()` for every password (~7,976 times)
+- Each thread calls `statistics.incrementTasksProcessed()` for every password (~7,976 times)
+- Each thread calls `statistics.incrementPasswordsFound()` for every match (~8,161 times)
+- **Total: ~24,000+ atomic operations** across all threads
+
+**Why This is Expensive**:
+- `AtomicLong.incrementAndGet()` requires CPU cache line synchronization
+- When thread A updates an atomic, threads B, C, D must invalidate their cache lines
+- This creates a **memory bottleneck** where threads compete for the same cache lines
+- Known as "false sharing" and "cache line ping-pong"
+
+### Solution Implemented
+Added **batched atomic updates** using local counters:
+
+**Before (Hot Path - High Contention)**:
+```java
+for (String password : passwordChunk) {
+    String hash = HashUtil.sha256(password);
+    statistics.incrementHashesComputed();      // Atomic operation
+    statistics.incrementTasksProcessed();      // Atomic operation
+    
+    if (matchedUsers != null) {
+        statistics.incrementPasswordsFound();  // Atomic operation
+    }
+}
+```
+
+**After (Cold Path - Low Contention)**:
+```java
+// Local counters (thread-local, no synchronization needed)
+long localHashesComputed = 0;
+long localTasksProcessed = 0;
+long localPasswordsFound = 0;
+
+for (String password : passwordChunk) {
+    String hash = HashUtil.sha256(password);
+    localHashesComputed++;    // Simple increment (register/L1 cache)
+    localTasksProcessed++;    // Simple increment
+    
+    if (matchedUsers != null) {
+        localPasswordsFound++;  // Simple increment
+    }
+}
+
+// Batch update: Only 3 atomic operations total per thread
+statistics.addHashesComputed(localHashesComputed);
+statistics.addTasksProcessed(localTasksProcessed);
+statistics.addPasswordsFound(localPasswordsFound);
+```
+
+**Key Implementation Details**:
+
+1. **Local Counters**: Each thread maintains private counters
+   - No synchronization overhead
+   - CPU can keep these in registers or L1 cache
+   - Simple integer increment (1 cycle) vs atomic operation (~100 cycles)
+
+2. **Batch Update**: Single atomic operation per counter per chunk
+   - For 4 threads: Reduced from ~24,000 atomics to just **12 atomics total**
+   - **~2,000x reduction in atomic operations**
+
+3. **New Methods in CrackingStatistics**:
+   - `addHashesComputed(long count)` - batch add hashes
+   - `addTasksProcessed(long count)` - batch add tasks
+   - `addPasswordsFound(long count)` - batch add passwords
+
+### Performance Impact
+
+**Atomic Operation Reduction**:
+- **Before**: ~7,976 atomics per thread × 4 threads = ~31,904 atomic operations
+- **After**: 3 atomics per thread × 4 threads = **12 atomic operations**
+- **Reduction**: 99.96% fewer atomic operations
+
+**Cache Coherency Benefits**:
+- Eliminates constant cache line invalidation during processing
+- CPUs spend more time computing, less time synchronizing
+- Better CPU instruction pipelining and branch prediction
+
+### Technical Deep Dive: Why This Works
+
+**CPU Cache Architecture**:
+```
+Thread A          Thread B          Thread C
+[L1 Cache] -----> [L1 Cache] -----> [L1 Cache]
+    |                 |                 |
+    +--------[L2/L3 Shared Cache]-------+
+                      |
+            [Main Memory: AtomicLong]
+```
+
+**Old Approach** - Cache line bouncing:
+1. Thread A reads `AtomicLong` into L1 cache
+2. Thread A increments and writes back (locks cache line)
+3. Thread B wants to increment - must wait for Thread A's write
+4. Thread B's L1 cache is invalidated
+5. Thread B fetches updated value, locks cache line
+6. **Repeat 7,976 times** → massive overhead
+
+**New Approach** - Batch update:
+1. Each thread uses **local variable** (stays in registers/L1)
+2. No cache line conflicts during main loop
+3. Single atomic update at end (minor overhead)
+4. **Result**: ~2000x fewer cache line transfers
+
 ## Conclusion
 
 The refactored solution successfully addresses all identified flaws:
@@ -213,3 +321,4 @@ The refactored solution successfully addresses all identified flaws:
 - ✅ Modern Java 21 features
 - ✅ ~392,000x performance improvement
 - ✅ 100% correctness verified
+- ✅ Batched atomic updates to eliminate cache contention
