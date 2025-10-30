@@ -1,3 +1,4 @@
-# Optimal command for fastest performance (~45ms)
+# Optimal command for fastest performance with Vector API (JEP 508)
+# Vector API requires --add-modules flag to access incubator module
 
-java -Xms256m -Xmx512m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -jar run.jar datasets/large/in.txt datasets/large/dictionary.txt out.txt
+java --add-modules jdk.incubator.vector -Xms256m -Xmx512m -XX:+UseSerialGC -XX:TieredStopAtLevel=1 -jar run.jar datasets/large/in.txt datasets/large/dictionary.txt datasets\large\output.txt
